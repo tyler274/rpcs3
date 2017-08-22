@@ -36,7 +36,7 @@
       </sizepolicy>
      </property>
      <property name="currentIndex">
-      <number>7</number>
+      <number>0</number>
      </property>
      <widget class="QWidget" name="coreTab">
       <attribute name="title">
@@ -1198,11 +1198,18 @@
           </widget>
          </item>
          <item>
-          <widget class="QGroupBox" name="groupBox_2">
+          <widget class="QGroupBox" name="gb_colors">
            <property name="title">
-            <string>UI Colors (difficult in stylesheets)</string>
+            <string>UI Colors</string>
            </property>
            <layout class="QVBoxLayout" name="verticalLayout_13">
+            <item>
+             <widget class="QCheckBox" name="cb_custom_colors">
+              <property name="text">
+               <string>Use custom UI Colors</string>
+              </property>
+             </widget>
+            </item>
             <item>
              <widget class="QPushButton" name="pb_tool_bar_color">
               <property name="text">

@@ -287,18 +287,48 @@ void rpcs3_app::OnChangeStyleSheetRequest(const QString& sheetFilePath)
 	QFile file(sheetFilePath);
 	if (sheetFilePath == "")
 	{
-		setStyleSheet(
-			"QWidget#header_section { background-color: #ffffff; }"
-			"QLineEdit#mw_searchbar { margin-left:14px; }"
+		// toolbar color stylesheet
+		QColor tbc = GUI::mw_tool_bar_color;
+		QString style_toolbar = QString(
+			"QLineEdit#mw_searchbar { margin-left:14px; background-color: rgba(%1, %2, %3, %4); }"
+			"QToolBar#mw_toolbar { background-color: rgba(%1, %2, %3, %4); }"
+			"QToolBar#mw_toolbar QSlider { background-color: rgba(%1, %2, %3, %4); }"
+			"QToolBar#mw_toolbar::separator {background-color: rgba(%5, %6, %7, %8); width: 1px; margin-top: 2px; margin-bottom: 2px;}")
+			.arg(tbc.red()).arg(tbc.green()).arg(tbc.blue()).arg(tbc.alpha())
+			.arg(tbc.red() - 20).arg(tbc.green() - 20).arg(tbc.blue() - 20).arg(tbc.alpha() - 20);
+
+		// toolbar icon color stylesheet
+		QColor tic = GUI::mw_tool_icon_color;
+		QString style_toolbar_icons = QString(
+			"QLabel#toolbar_icon_color { color: rgba(%1, %2, %3, %4); }")
+			.arg(tic.red()).arg(tic.green()).arg(tic.blue()).arg(tic.alpha());
+
+		// gamelist toolbar stylesheet
+		QColor gltic = GUI::gl_tool_icon_color;
+		QString style_gamelist_toolbar = QString(
 			"QLineEdit#tb_searchbar { background: transparent; }"
-			"QLabel#gamegrid_font { font-weight: 600; font-size: 8pt; font-family: Lucida Grande; color: rgba(51, 51, 51, 255); }"
-		);
+			"QLabel#gamelist_toolbar_icon_color { color: rgba(%1, %2, %3, %4); }")
+			.arg(gltic.red()).arg(gltic.green()).arg(gltic.blue()).arg(gltic.alpha());
+
+		// gamelist icon color stylesheet
+		QColor glic = GUI::gl_icon_color;
+		QString style_gamelist_icons = QString(
+			"QLabel#gamelist_icon_background_color { color: rgba(%1, %2, %3, %4); }")
+			.arg(glic.red()).arg(glic.green()).arg(glic.blue()).arg(glic.alpha());
+
+		// other objects' stylesheet
+		QString style_rest = QString(
+			"QWidget#header_section { background-color: #ffffff; }"
+			"QLabel#gamegrid_font { font-weight: 600; font-size: 8pt; font-family: Lucida Grande; color: rgba(51, 51, 51, 255); }");
+
+		setStyleSheet(style_toolbar + style_toolbar_icons + style_gamelist_toolbar + style_gamelist_icons  + style_rest);
 	}
 	else if (file.open(QIODevice::ReadOnly | QIODevice::Text))
 	{
 		setStyleSheet(file.readAll());
 		file.close();
 	}
+	GUI::stylesheet = styleSheet();
 }
 
 /**

@@ -93,7 +93,7 @@ settings_dialog::settings_dialog(std::shared_ptr<gui_settings> xSettings, const 
 		}
 		std::vector<std::string> selected_ls = std::vector<std::string>(selectedlle.begin(), selectedlle.end());
 		xemu_settings->SaveSelectedLibraries(selected_ls);
-		Q_EMIT ToolBarRepaintRequest();
+		Q_EMIT GuiRepaintRequest();
 	});
 	connect(ui->okButton, &QAbstractButton::clicked, xemu_settings.get(), &emu_settings::SaveSettings);
 	connect(ui->okButton, &QAbstractButton::clicked, this, &QDialog::accept);
@@ -669,6 +669,8 @@ settings_dialog::settings_dialog(std::shared_ptr<gui_settings> xSettings, const 
 
 	ui->cb_show_welcome->setToolTip(json_emu_gui["show_welcome"].toString());
 
+	ui->cb_custom_colors->setToolTip(json_emu_gui["custom_colors"].toString());
+
 	xemu_settings->EnhanceCheckBox(ui->exitOnStop, emu_settings::ExitRPCS3OnFinish);
 	ui->exitOnStop->setToolTip(json_emu_misc["exitOnStop"].toString());
 
@@ -686,32 +688,84 @@ settings_dialog::settings_dialog(std::shared_ptr<gui_settings> xSettings, const 
 		ui->gb_stylesheets->setEnabled(false);
 		ui->gb_configs->setEnabled(false);
 		ui->gb_settings->setEnabled(false);
+		ui->gb_colors->setEnabled(false);
 	}
 	else
 	{
+		// colorize preview icons
+		auto addColoredIcon = [&](QPushButton *button, const QColor& color, const QIcon& icon = QIcon(), const QColor& iconColor = QColor()) {
+			QLabel* text = new QLabel(button->text());
+			text->setObjectName("color_button");
+			text->setAlignment(Qt::AlignCenter);
+			text->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+			delete button->layout();
+			if (icon.isNull())
+			{
+				QPixmap pixmap(100, 100);
+				pixmap.fill(color);
+				button->setIcon(pixmap);
+			}
+			else
+			{
+				button->setIcon(gui_settings::colorizedIcon(icon, iconColor, color));
+			}
+			button->setText("");
+			button->setStyleSheet(styleSheet().append("text-align:left;"));
+			button->setLayout(new QGridLayout);
+			button->layout()->setContentsMargins(0, 0, 0, 0);
+			button->layout()->addWidget(text);
+		};
+
+		auto AddColoredIcons = [=]() {
+			addColoredIcon(ui->pb_gl_icon_color, xgui_settings->GetValue(GUI::gl_iconColor).value<QColor>());
+			addColoredIcon(ui->pb_tool_bar_color, xgui_settings->GetValue(GUI::mw_toolBarColor).value<QColor>());
+			addColoredIcon(ui->pb_gl_tool_icon_color, xgui_settings->GetValue(GUI::gl_toolIconColor).value<QColor>(), QIcon(":/Icons/home_blue.png"), GUI::gl_tool_icon_color);
+			addColoredIcon(ui->pb_tool_icon_color, xgui_settings->GetValue(GUI::mw_toolIconColor).value<QColor>(), QIcon(":/Icons/stop.png"), GUI::mw_tool_icon_color);
+		};
+		AddColoredIcons();
+
 		ui->cb_show_welcome->setChecked(xgui_settings->GetValue(GUI::ib_show_welcome).toBool());
 
-		connect(ui->okButton, &QAbstractButton::clicked, [this]() {
+		bool enableUIColors = xgui_settings->GetValue(GUI::m_enableUIColors).toBool();
+		ui->cb_custom_colors->setChecked(enableUIColors);
+		ui->pb_gl_icon_color->setEnabled(enableUIColors);
+		ui->pb_gl_tool_icon_color->setEnabled(enableUIColors);
+		ui->pb_tool_bar_color->setEnabled(enableUIColors);
+		ui->pb_tool_icon_color->setEnabled(enableUIColors);
+
+		auto ApplyGuiOptions = [&](bool reset = false) {
+			if (reset)
+			{
+				m_currentConfig = GUI::Default;
+				m_currentStylesheet = GUI::Default;
+				ui->combo_configs->setCurrentText(GUI::Default);
+				ui->combo_stylesheets->setCurrentText(GUI::Default);
+			}
 			// Only attempt to load a config if changes occurred.
-			if (m_startingConfig != xgui_settings->GetValue(GUI::m_currentConfig).toString())
+			if (m_currentConfig != xgui_settings->GetValue(GUI::m_currentConfig).toString())
 			{
 				OnApplyConfig();
 			}
-			if (m_startingStylesheet != xgui_settings->GetValue(GUI::m_currentStylesheet).toString())
+			if (m_currentStylesheet != xgui_settings->GetValue(GUI::m_currentStylesheet).toString())
 			{
 				OnApplyStylesheet();
 			}
-		});
+		};
+
+		connect(ui->okButton, &QAbstractButton::clicked, [=]() { ApplyGuiOptions(); });
 		connect(ui->pb_reset_default, &QAbstractButton::clicked, [=]() {
 			if (QMessageBox::question(this, tr("Reset GUI to default?"), tr("This will include your stylesheet as well. Do you wish to proceed?"),
 				QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes)
 			{
+				ApplyGuiOptions(true);
 				xgui_settings->Reset(true);
-				xgui_settings->ChangeToConfig(tr("default"));
-				Q_EMIT GuiStylesheetRequest(tr("default"));
+				xgui_settings->ChangeToConfig(GUI::Default);
+				Q_EMIT GuiStylesheetRequest(GUI::Default);
 				Q_EMIT GuiSettingsSyncRequest();
+				Q_EMIT GuiRepaintRequest();
 				AddConfigs();
 				AddStylesheets();
+				AddColoredIcons();
 			}
 		});
 		connect(ui->pb_backup_config, &QAbstractButton::clicked, this, &settings_dialog::OnBackupCurrentConfig);
@@ -719,6 +773,14 @@ settings_dialog::settings_dialog(std::shared_ptr<gui_settings> xSettings, const 
 		connect(ui->pb_apply_stylesheet, &QAbstractButton::clicked, this, &settings_dialog::OnApplyStylesheet);
 		connect(ui->pb_open_folder, &QAbstractButton::clicked, [=]() {QDesktopServices::openUrl(xgui_settings->GetSettingsDir()); });
 		connect(ui->cb_show_welcome, &QCheckBox::clicked, [=](bool val) {xgui_settings->SetValue(GUI::ib_show_welcome, val); });
+		connect(ui->cb_custom_colors, &QCheckBox::clicked, [=](bool val) {
+			xgui_settings->SetValue(GUI::m_enableUIColors, val);
+			ui->pb_gl_icon_color->setEnabled(val);
+			ui->pb_gl_tool_icon_color->setEnabled(val);
+			ui->pb_tool_bar_color->setEnabled(val);
+			ui->pb_tool_icon_color->setEnabled(val);
+			Q_EMIT GuiRepaintRequest();
+		});
 		auto colorDialog = [&](const GUI_SAVE& color, const QString& title, QPushButton *button){
 			QColor oldColor = xgui_settings->GetValue(color).value<QColor>();
 			QColorDialog dlg(oldColor, this);
@@ -736,39 +798,13 @@ settings_dialog::settings_dialog(std::shared_ptr<gui_settings> xSettings, const 
 				}
 				xgui_settings->SetValue(color, dlg.selectedColor());
 				button->setIcon(gui_settings::colorizedIcon(button->icon(), oldColor, dlg.selectedColor(), true));
+				Q_EMIT GuiRepaintRequest();
 			}
 		};
 		connect(ui->pb_gl_icon_color, &QAbstractButton::clicked, [=]() { colorDialog(GUI::gl_iconColor, tr("Choose gamelist icon color"), ui->pb_gl_icon_color); });
 		connect(ui->pb_gl_tool_icon_color, &QAbstractButton::clicked, [=]() { colorDialog(GUI::gl_toolIconColor, tr("Choose gamelist tool icon color"), ui->pb_gl_tool_icon_color); });
 		connect(ui->pb_tool_bar_color, &QAbstractButton::clicked, [=]() { colorDialog(GUI::mw_toolBarColor, tr("Choose tool bar color"), ui->pb_tool_bar_color); });
 		connect(ui->pb_tool_icon_color, &QAbstractButton::clicked, [=]() { colorDialog(GUI::mw_toolIconColor, tr("Choose tool icon color"), ui->pb_tool_icon_color); });
-
-		// colorize preview icons
-		auto addColoredIcon = [&](QPushButton *button, const QColor& color, const QIcon& icon = QIcon(), const QColor& iconColor = QColor()){
-			QLabel* text = new QLabel(button->text());
-			text->setObjectName("color_button");
-			text->setAlignment(Qt::AlignCenter);
-			text->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-			if (icon.isNull())
-			{
-				QPixmap pixmap(100, 100);
-				pixmap.fill(color);
-				button->setIcon(pixmap);
-			}
-			else
-			{
-				button->setIcon(gui_settings::colorizedIcon(icon, iconColor, color));
-			}
-			button->setText("");
-			button->setStyleSheet(styleSheet().append("text-align:left;"));
-			button->setLayout(new QGridLayout);
-			button->layout()->setContentsMargins(0, 0, 0, 0);
-			button->layout()->addWidget(text);
-		};
-		addColoredIcon(ui->pb_gl_icon_color, xgui_settings->GetValue(GUI::gl_iconColor).value<QColor>());
-		addColoredIcon(ui->pb_tool_bar_color, xgui_settings->GetValue(GUI::mw_toolBarColor).value<QColor>());
-		addColoredIcon(ui->pb_gl_tool_icon_color, xgui_settings->GetValue(GUI::gl_toolIconColor).value<QColor>(), QIcon(":/Icons/home_blue.png"), GUI::gl_tool_icon_color);
-		addColoredIcon(ui->pb_tool_icon_color, xgui_settings->GetValue(GUI::mw_toolIconColor).value<QColor>(), QIcon(":/Icons/stop.png"), GUI::mw_tool_icon_color);
 
 		ui->gs_disableMouse->setChecked(xgui_settings->GetValue(GUI::gs_disableMouse).toBool());
 		connect(ui->gs_disableMouse, &QCheckBox::clicked, [=](bool val) { xgui_settings->SetValue(GUI::gs_disableMouse, val); });
@@ -858,20 +894,19 @@ void settings_dialog::AddConfigs()
 {
 	ui->combo_configs->clear();
 
-	ui->combo_configs->addItem(tr("default"));
+	ui->combo_configs->addItem(GUI::Default);
 
 	for (QString entry : xgui_settings->GetConfigEntries())
 	{
-		if (entry != tr("default"))
+		if (entry != GUI::Default)
 		{
 			ui->combo_configs->addItem(entry);
 		}
 	}
 
-	QString currentSelection = tr("CurrentSettings");
-	m_startingConfig = currentSelection;
+	m_currentConfig = tr("CurrentSettings");
 
-	int index = ui->combo_configs->findText(currentSelection);
+	int index = ui->combo_configs->findText(m_currentConfig);
 	if (index != -1)
 	{
 		ui->combo_configs->setCurrentIndex(index);
@@ -886,20 +921,19 @@ void settings_dialog::AddStylesheets()
 {
 	ui->combo_stylesheets->clear();
 
-	ui->combo_stylesheets->addItem(tr("default"));
+	ui->combo_stylesheets->addItem(GUI::Default);
 
 	for (QString entry : xgui_settings->GetStylesheetEntries())
 	{
-		if (entry != tr("default"))
+		if (entry != GUI::Default)
 		{
 			ui->combo_stylesheets->addItem(entry);
 		}
 	}
 
-	QString currentSelection = xgui_settings->GetValue(GUI::m_currentStylesheet).toString();
-	m_startingStylesheet = currentSelection;
+	m_currentStylesheet = xgui_settings->GetValue(GUI::m_currentStylesheet).toString();
 
-	int index = ui->combo_stylesheets->findText(currentSelection);
+	int index = ui->combo_stylesheets->findText(m_currentStylesheet);
 	if (index != -1)
 	{
 		ui->combo_stylesheets->setCurrentIndex(index);
@@ -946,15 +980,16 @@ void settings_dialog::OnBackupCurrentConfig()
 
 void settings_dialog::OnApplyConfig()
 {
-	QString name = ui->combo_configs->currentText();
-	xgui_settings->SetValue(GUI::m_currentConfig, name);
-	xgui_settings->ChangeToConfig(name);
+	m_currentConfig = ui->combo_configs->currentText();
+	xgui_settings->SetValue(GUI::m_currentConfig, m_currentConfig);
+	xgui_settings->ChangeToConfig(m_currentConfig);
 	Q_EMIT GuiSettingsSyncRequest();
 }
 
 void settings_dialog::OnApplyStylesheet()
 {
-	xgui_settings->SetValue(GUI::m_currentStylesheet, ui->combo_stylesheets->currentText());
+	m_currentStylesheet = ui->combo_stylesheets->currentText();
+	xgui_settings->SetValue(GUI::m_currentStylesheet, m_currentStylesheet);
 	Q_EMIT GuiStylesheetRequest(xgui_settings->GetCurrentStylesheetPath());
 }
 
