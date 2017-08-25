@@ -5,6 +5,8 @@ set(RES_FILES "")
 set(CMAKE_CXX_STANDARD 14)
 include(CheckCCompilerFlag)
 
+add_definitions(-DLLVM_ON_UNIX)
+
 # Qt section
 find_package(Qt5 5.7 COMPONENTS Widgets)
 if (WIN32)
@@ -89,6 +91,7 @@ if(NOT MSVC)
 	# This hides our LLVM from mesa's LLVM, otherwise we get some unresolvable conflicts.
 	if(NOT APPLE)
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,--exclude-libs,ALL")
+		set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--exclude-libs,ALL")
 	endif()
 	
 	if(WIN32)
@@ -170,15 +173,27 @@ CHECK_C_COMPILER_FLAG("-mllvm -polly" HAS_POLLY)
 CHECK_C_COMPILER_FLAG("-mllvm -polly-target=hybrid" HAS_POLLY_HYBRID)
 CHECK_C_COMPILER_FLAG("-mllvm -polly-target=cpu" HAS_POLLY_CPU)
 
+#Ninja Rules for color
+CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always" HAS_COLOR)
+if (HAS_COLOR)
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fdiagnostics-color=always")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fdiagnostics-color=always")
+endif()
+
+#set(POLLY_FLAGS "-O3 -mllvm -polly -mllvm -polly-parallel -mllvm -polly-vectorizer=stripmine -march=skylake")
+set(POLLY_FLAGS "-O3 -mllvm -polly -march=skylake")
+
+
 if (HAS_POLLY)
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mllvm -polly -mllvm -polly-parallel -lgomp -mllvm -polly-vectorizer=stripmine")
-	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mllvm -polly -mllvm -polly-parallel -lgomp -mllvm -polly-vectorizer=stripmine")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${POLLY_FLAGS}")
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${POLLY_FLAGS}")
+	set(CMAKE_EXE_LINKER_FLAGS:STRING  "${CMAKE_EXE_LINKER_FLAGS} -lgomp")
 	if(HAS_POLLY_HYBRID)
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mllvm -polly-target=hybrid")
-		set(CMAKE_C_FLAGS "${CMAKE_CXX_FLAGS} -mllvm -polly-target=cpu")
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mllvm -polly-target=hybrid")
 	elseif(HAS_POLLY_CPU)
 		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mllvm -polly-target=cpu")
-		set(CMAKE_C_FLAGS "${CMAKE_CXX_FLAGS} -mllvm -polly-target=cpu")
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mllvm -polly-target=cpu")
 	endif()
 endif()
 
@@ -355,7 +370,7 @@ endif()
 add_dependencies(rpcs3 GitVersion)
 
 if(Polly_FOUND)
-	target_link_libraries(rpcs3 Polly PollyISL PollyPPCG)
+	target_link_libraries(rpcs3 Polly PollyISL PollyPPCG GPURuntime)
 endif()
 
 if(WIN32)
@@ -402,7 +417,7 @@ target_link_libraries(rpcs3 ${RPCS3_QT_LIBS})
 
 set_target_properties(rpcs3 PROPERTIES COTIRE_CXX_PREFIX_HEADER_INIT "${RPCS3_SRC_DIR}/stdafx.h")
 
-cotire(rpcs3)
+#cotire(rpcs3)
 
 # Unix installation
 if(UNIX AND NOT APPLE)
